@@ -28,16 +28,7 @@ func NewBloom(n uint32, p float64) *BloomFilter {
 }
 
 func (b *BloomFilter) Add(data []byte) {
-	h := fnv.New64a()
-	h.Write(data)
-	hash := h.Sum64()
-	noLines := len(b.bits) / 16
-	bitline := hash % uint64(noLines)
-
-	h1 := uint32(hash >> 32)
-	h2 := uint32(hash)
-	h2 |= 1
-
+	bitline, h1, h2 := b.hash(data)
 	for i := uint(0); i < b.k; i++ {
 		position := (h1 + uint32(i)*h2) % 512
 		globalBit := uint64(bitline)*512 + uint64(position)
@@ -50,16 +41,7 @@ func (b *BloomFilter) Add(data []byte) {
 }
 
 func (b *BloomFilter) MayContain(data []byte) bool {
-	h := fnv.New64a()
-	h.Write(data)
-	hash := h.Sum64()
-
-	noLines := len(b.bits) / 16
-	bitline := hash % uint64(noLines)
-
-	h1 := uint32(hash >> 32)
-	h2 := uint32(hash)
-	h2 |= 1
+	bitline, h1, h2 := b.hash(data)
 
 	for i := uint(0); i < b.k; i++ {
 		position := (h1 + uint32(i)*h2) % 512
@@ -75,4 +57,19 @@ func (b *BloomFilter) MayContain(data []byte) bool {
 	}
 
 	return true
+}
+
+func (b *BloomFilter) hash(data []byte) (uint64, uint32, uint32) {
+	h := fnv.New64a()
+	h.Write(data)
+	hash := h.Sum64()
+
+	noLines := len(b.bits) / 16
+	bitline := hash % uint64(noLines)
+
+	h1 := uint32(hash >> 32)
+	h2 := uint32(hash)
+	h2 |= 1
+
+	return bitline, h1, h2
 }

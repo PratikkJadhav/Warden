@@ -1,25 +1,59 @@
 package bloom
 
 import (
+	"fmt"
 	"testing"
 )
 
-func TestBloomContainsInsertedData(t *testing.T) {
-	b := NewBloom(1000, 0.001)
+func TestNoFalseNegatives(t *testing.T) {
+	const n = 100_000
 
-	b.Add([]byte("abc123"))
+	b := NewBloom(n, 0.01)
 
-	if !b.MayContain([]byte("abc123")) {
-		t.Error("Bloom filter says inserted item is not present")
+	for i := 0; i < n; i++ {
+		b.Add([]byte(fmt.Sprintf("key-%d", i)))
+	}
+
+	for i := 0; i < n; i++ {
+		key := []byte(fmt.Sprintf("key-%d", i))
+
+		if !b.MayContain(key) {
+			t.Fatalf("false negative for %s", key)
+		}
 	}
 }
 
-func TestBloomDoesNotContainMissingData(t *testing.T) {
-	b := NewBloom(1000, 0.001)
+func TestFalsePositiveRate(t *testing.T) {
+	const n = 1_000_000
 
-	b.Add([]byte("abc123"))
+	for _, p := range []float64{0.05, 0.001} {
+		t.Run(fmt.Sprintf("p=%g", p), func(t *testing.T) {
+			b := NewBloom(n, p)
 
-	if b.MayContain([]byte("xyz789")) {
-		t.Error("Bloom filter says missing item may be present")
+			// Insert 1M keys.
+			for i := 0; i < n; i++ {
+				b.Add([]byte(fmt.Sprintf("key-%d", i)))
+			}
+
+			// Query 1M keys that were never inserted.
+			falsePositives := 0
+
+			for i := 0; i < n; i++ {
+				key := []byte(fmt.Sprintf("other-%d", i))
+
+				if b.MayContain(key) {
+					falsePositives++
+				}
+			}
+
+			rate := float64(falsePositives) / float64(n)
+
+			t.Logf(
+				"target=%f false_positives=%d rate=%f",
+				p,
+				falsePositives,
+				rate,
+			)
+		})
 	}
 }
