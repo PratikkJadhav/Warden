@@ -1,6 +1,8 @@
 package bloom
 
 import (
+	"bytes"
+	"encoding/binary"
 	"hash/fnv"
 	"math"
 )
@@ -92,4 +94,15 @@ func position(h uint64, i uint) uint32 {
 	x = fmix64(x)
 
 	return uint32(x & 511)
+}
+
+func (b *BloomFilter) Bytes() *bytes.Buffer {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.BigEndian, b.bits)
+
+	if err != nil {
+		return nil
+	}
+
+	return buf
 }
