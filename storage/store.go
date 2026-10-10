@@ -42,19 +42,18 @@ func newStore(dir string) (*store, error) {
 	}, err
 }
 
-// func TestBloomSample() {
-// 	tokens1 := tokenizer.Tokenize("test123 key value time10")
+func (s *store) append(data []byte) (int64, error) {
+	start := s.offset
 
-// 	bf := bloom.NewBloom(100, 0.0005)
-// 	for _, token := range tokens1 {
-// 		bf.Add([]byte(token))
-// 	}
+	n, err := s.file.Write(data)
+	s.offset += int64(n)
 
-// 	s1, err := newStore("/mnt/d/Pratik/Projects/Warden")
-// 	if err != nil {
-// 		return
-// 	}
+	if err != nil {
+		return start, err
+	}
+	if n != len(data) {
+		return start, io.ErrShortWrite
+	}
 
-// 	s1.file.Write(bf.Bytes().Bytes())
-
-// }
+	return start, nil
+}

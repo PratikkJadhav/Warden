@@ -1,10 +1,15 @@
 package bloom
 
 import (
-	"bytes"
 	"encoding/binary"
 	"hash/fnv"
 	"math"
+)
+
+const (
+	lineBits  = 512
+	lineBytes = 64
+	lineWords = 16
 )
 
 type BloomFilter struct {
@@ -46,25 +51,6 @@ func (b *BloomFilter) Add(data []byte) {
 	}
 }
 
-func (b *BloomFilter) MayContain(data []byte) bool {
-	bitline, hash := b.hash(data)
-
-	for i := uint(0); i < b.k; i++ {
-		pos := position(hash, i)
-
-		globalBit := uint64(bitline)*512 + uint64(pos)
-
-		word := globalBit / 32
-		bit := globalBit % 32
-
-		if b.bits[word]&(1<<bit) == 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (b *BloomFilter) hash(data []byte) (uint64, uint64) {
 	h := fnv.New64a()
 	h.Write(data)
@@ -96,13 +82,53 @@ func position(h uint64, i uint) uint32 {
 	return uint32(x & 511)
 }
 
-func (b *BloomFilter) Bytes() *bytes.Buffer {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.BigEndian, b.bits)
+func (b *BloomFilter) Bytes() []byte {
+	data := make([]byte, len(b.bits)*4)
 
-	if err != nil {
-		return nil
+	for i, word := range b.bits {
+		binary.LittleEndian.PutUint32(data[i*4:], word)
 	}
 
-	return buf
+	return data
+}
+
+func (b *BloomFilter) LineIndex(data []byte) uint64 {
+	lineIndex, _ := b.hash(data)
+	return lineIndex
+}
+
+func (b *BloomFilter) MayContain(data []byte) bool {
+	lineIndex := b.LineIndex(data)
+	return b.MayContainInLine(data, b.lineByte(lineIndex))
+}
+func (b *BloomFilter) MayContainInLine(data, line []byte) bool {
+	if len(line) != lineBytes {
+		return false
+	}
+
+	_, hash := b.hash(data)
+
+	for i := uint(0); i < b.k; i++ {
+		pos := position(hash, i)
+		byteIndex := pos / 8
+		bitIndex := pos % 8
+
+		if line[byteIndex]&(byte(1)<<bitIndex) == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (b *BloomFilter) lineByte(lineIndex uint64) []byte {
+	start := int(lineIndex) * lineWords
+	line := make([]byte, lineBytes)
+	for i := 0; i < lineWords; i++ {
+		binary.LittleEndian.PutUint32(
+			line[i*4:],
+			b.bits[start+i],
+		)
+	}
+	return line
 }
