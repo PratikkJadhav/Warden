@@ -26,9 +26,12 @@ func TestNoFalseNegatives(t *testing.T) {
 func TestFalsePositiveRate(t *testing.T) {
 	const n = 1_000_000
 
-	for _, p := range []float64{0.05, 0.001} {
+	for _, p := range []float64{0.05, 0.0007, 0.0006, 0.0005} {
 		t.Run(fmt.Sprintf("p=%g", p), func(t *testing.T) {
 			b := NewBloom(n, p)
+
+			actualBitsPerToken := float64(len(b.bits)*32) / float64(n)
+			t.Logf("target=%f bits_per_token=%.2f", p, actualBitsPerToken)
 
 			// Insert 1M keys.
 			for i := 0; i < n; i++ {

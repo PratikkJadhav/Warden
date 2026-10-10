@@ -16,6 +16,10 @@ func NewBloom(n uint32, p float64) *BloomFilter {
 	totalBits := uint32(math.Ceil(float64(n) * bitsPerToken))
 	totalBits = ((totalBits + 511) / 512) * 512
 
+	if totalBits < 512 {
+		totalBits = 512
+	}
+
 	k := uint(math.Round(0.69 * bitsPerToken))
 
 	numWords := totalBits / 32
@@ -28,10 +32,10 @@ func NewBloom(n uint32, p float64) *BloomFilter {
 }
 
 func (b *BloomFilter) Add(data []byte) {
-	bitline, h1, h2 := b.hash(data)
+	bitline, hash := b.hash(data)
 	for i := uint(0); i < b.k; i++ {
-		position := (h1 + uint32(i)*h2) % 512
-		globalBit := uint64(bitline)*512 + uint64(position)
+		pos := position(hash, i)
+		globalBit := uint64(bitline)*512 + uint64(pos)
 
 		word := globalBit / 32
 		bit := globalBit % 32
@@ -41,12 +45,12 @@ func (b *BloomFilter) Add(data []byte) {
 }
 
 func (b *BloomFilter) MayContain(data []byte) bool {
-	bitline, h1, h2 := b.hash(data)
+	bitline, hash := b.hash(data)
 
 	for i := uint(0); i < b.k; i++ {
-		position := (h1 + uint32(i)*h2) % 512
+		pos := position(hash, i)
 
-		globalBit := uint64(bitline)*512 + uint64(position)
+		globalBit := uint64(bitline)*512 + uint64(pos)
 
 		word := globalBit / 32
 		bit := globalBit % 32
@@ -59,17 +63,33 @@ func (b *BloomFilter) MayContain(data []byte) bool {
 	return true
 }
 
-func (b *BloomFilter) hash(data []byte) (uint64, uint32, uint32) {
+func (b *BloomFilter) hash(data []byte) (uint64, uint64) {
 	h := fnv.New64a()
 	h.Write(data)
 	hash := h.Sum64()
 
+	hash = fmix64(hash)
+
 	noLines := len(b.bits) / 16
 	bitline := hash % uint64(noLines)
 
-	h1 := uint32(hash >> 32)
-	h2 := uint32(hash)
-	h2 |= 1
+	return bitline, hash
+}
 
-	return bitline, h1, h2
+func fmix64(k uint64) uint64 {
+	k ^= k >> 33
+	k *= 0xff51afd7ed558ccd
+	k ^= k >> 33
+	k *= 0xc4ceb9fe1a85ec53
+	k ^= k >> 33
+	return k
+}
+
+func position(h uint64, i uint) uint32 {
+	const step uint64 = 0x9e3779b97f4a7c15
+
+	x := h + uint64(i)*step
+	x = fmix64(x)
+
+	return uint32(x & 511)
 }
