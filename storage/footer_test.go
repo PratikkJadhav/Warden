@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"testing"
 )
 
@@ -49,16 +48,14 @@ func TestDecodeFooterRejectsInvalidMagic(t *testing.T) {
 	}
 }
 
-func TestFooterEncodingIsDeterministic(t *testing.T) {
+func TestDecodeFooterRejectsUnsupportedVersion(t *testing.T) {
 	f := footer{
-		Magic:           FooterMagic,
-		Version:         FormatVersion,
-		DirectoryOffset: 1200,
-		EntryCount:      3,
-		DirectoryCRC:    123456,
+		Magic:   FooterMagic,
+		Version: 2,
 	}
 
-	if !bytes.Equal(f.Encode(), f.Encode()) {
-		t.Fatal("encoding should be deterministic")
+	_, err := DecodeFooter(f.Encode())
+	if err == nil {
+		t.Fatal("expected error for unsupported footer version")
 	}
 }

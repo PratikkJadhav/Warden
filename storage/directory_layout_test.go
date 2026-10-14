@@ -1,0 +1,57 @@
+package storage
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestDirectoryEntryBinaryLayout(t *testing.T) {
+	entry := DirectoryEntry{
+		FilterOffset: 0x0807060504030201,
+		FilterSize:   0x1817161514131211,
+		K:            0x01020304,
+		DataOffset:   0x2827262524232221,
+		DataSize:     0x3837363534333231,
+		MinTimestamp: 0x4847464544434241,
+		MaxTimestamp: 0x5857565554535251,
+		RowCount:     0x6867666564636261,
+	}
+
+	expected := []byte{
+		// FilterOffset: bytes 0-7
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+
+		// FilterSize: bytes 8-15
+		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+
+		// K: bytes 16-19
+		0x04, 0x03, 0x02, 0x01,
+
+		// DataOffset: bytes 20-27
+		0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+
+		// DataSize: bytes 28-35
+		0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+
+		// MinTimestamp: bytes 36-43
+		0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48,
+
+		// MaxTimestamp: bytes 44-51
+		0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58,
+
+		// RowCount: bytes 52-59
+		0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
+	}
+
+	got := entry.Encode()
+
+	if len(got) != DirectoryEntrySize {
+		t.Fatalf("encoded size = %d, want %d",
+			len(got), DirectoryEntrySize)
+	}
+
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("encoded bytes do not match the expected file format\n got: % x\nwant: % x",
+			got, expected)
+	}
+}
