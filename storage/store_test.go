@@ -16,7 +16,7 @@ func TestDiskBloomLookup(t *testing.T) {
 
 	bf := bloom.NewBloom(insertCount, 0.0005)
 
-	// Insert 10,000 known tokens.
+	// Insert known tokens.
 	for i := 0; i < insertCount; i++ {
 		token := fmt.Sprintf("inserted-token-%d", i)
 		bf.Add([]byte(token))
@@ -25,17 +25,19 @@ func TestDiskBloomLookup(t *testing.T) {
 	serialized := bf.Bytes()
 
 	if len(serialized)%lineSize != 0 {
-		t.Fatalf("serialized filter size %d is not 64-byte aligned", len(serialized))
+		t.Fatalf("filter size %d is not line-aligned", len(serialized))
 	}
 
-	// Use an isolated temporary directory for this test.
+	// Metadata that a future directory entry will store.
+	k := bf.K()
+	numLines := uint64(len(serialized) / lineSize)
+
 	s, err := newStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.file.Close()
 
-	// Write the complete filter and remember where it starts.
 	start, err := s.append(serialized)
 	if err != nil {
 		t.Fatal(err)
@@ -44,56 +46,74 @@ func TestDiskBloomLookup(t *testing.T) {
 	readLine := func(token string) []byte {
 		t.Helper()
 
-		lineIndex := bf.LineIndex([]byte(token))
-		lineOffset := start + int64(lineIndex*lineSize)
-
-		line := make([]byte, lineSize)
-		n, err := s.file.ReadAt(line, lineOffset)
+		lineIndex, err := bloom.LineIndex(
+			[]byte(token),
+			numLines,
+		)
 		if err != nil {
-			t.Fatalf("ReadAt failed for %q: %v", token, err)
+			t.Fatal(err)
+		}
+
+		offset := start + int64(lineIndex)*lineSize
+		line := make([]byte, lineSize)
+
+		n, err := s.file.ReadAt(line, offset)
+		if err != nil {
+			t.Fatalf("ReadAt for %q: %v", token, err)
 		}
 		if n != lineSize {
-			t.Fatalf("read %d bytes for %q; expected %d", n, token, lineSize)
+			t.Fatalf("read %d bytes; expected %d", n, lineSize)
 		}
 
 		return line
 	}
 
-	// Every inserted token must be found using only its disk line.
+	// Inserted tokens must never be reported absent.
 	for i := 0; i < insertCount; i++ {
 		token := fmt.Sprintf("inserted-token-%d", i)
 		line := readLine(token)
 
-		diskAnswer := bf.MayContainInLine([]byte(token), line)
-		memoryAnswer := bf.MayContain([]byte(token))
+		diskAnswer, err := bloom.MayContainInLine(
+			[]byte(token), k, line,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		if !diskAnswer {
-			t.Fatalf("false negative for inserted token %q", token)
+			t.Fatalf("false negative for %q", token)
 		}
-		if diskAnswer != memoryAnswer {
-			t.Fatalf("disk and memory answers differ for %q", token)
+
+		if diskAnswer != bf.MayContain([]byte(token)) {
+			t.Fatalf("disk/memory mismatch for %q", token)
 		}
 	}
 
-	// For absent tokens, disk and memory must agree.
-	// Both answers may legitimately be true due to false positives.
+	// Absent tokens may produce false positives, but disk
+	// and memory must always return the same answer.
 	for i := 0; i < absentCount; i++ {
 		token := fmt.Sprintf("absent-token-%d", i)
 		line := readLine(token)
 
-		diskAnswer := bf.MayContainInLine([]byte(token), line)
+		diskAnswer, err := bloom.MayContainInLine(
+			[]byte(token), k, line,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		memoryAnswer := bf.MayContain([]byte(token))
 
 		if diskAnswer != memoryAnswer {
 			t.Fatalf(
-				"disk and memory answers differ for %q: disk=%v memory=%v",
+				"disk/memory mismatch for %q: disk=%v memory=%v",
 				token, diskAnswer, memoryAnswer,
 			)
 		}
 	}
 
 	t.Logf(
-		"verified %d inserted tokens and %d absent tokens",
+		"verified %d inserted and %d absent tokens",
 		insertCount, absentCount,
 	)
 }

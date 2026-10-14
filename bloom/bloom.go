@@ -2,6 +2,7 @@ package bloom
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 	"math"
 )
@@ -51,6 +52,14 @@ func (b *BloomFilter) Add(data []byte) {
 	}
 }
 
+func hashToken(data []byte) uint64 {
+	h := fnv.New64a()
+	h.Write(data)
+	hash := h.Sum64()
+
+	return fmix64(hash)
+}
+
 func (b *BloomFilter) hash(data []byte) (uint64, uint64) {
 	h := fnv.New64a()
 	h.Write(data)
@@ -73,6 +82,10 @@ func fmix64(k uint64) uint64 {
 	return k
 }
 
+func (b *BloomFilter) K() uint {
+	return b.k
+}
+
 func position(h uint64, i uint) uint32 {
 	const step uint64 = 0x9e3779b97f4a7c15
 
@@ -80,6 +93,10 @@ func position(h uint64, i uint) uint32 {
 	x = fmix64(x)
 
 	return uint32(x & 511)
+}
+
+func (b *BloomFilter) NumLines() uint64 {
+	return uint64(len(b.bits) / lineWords)
 }
 
 func (b *BloomFilter) Bytes() []byte {
@@ -92,33 +109,49 @@ func (b *BloomFilter) Bytes() []byte {
 	return data
 }
 
-func (b *BloomFilter) LineIndex(data []byte) uint64 {
-	lineIndex, _ := b.hash(data)
-	return lineIndex
+func LineIndex(data []byte, numLines uint64) (uint64, error) {
+	if numLines == 0 {
+		return 0, fmt.Errorf("line count must be greater than zero")
+	}
+
+	return hashToken(data) % numLines, nil
 }
 
 func (b *BloomFilter) MayContain(data []byte) bool {
-	lineIndex := b.LineIndex(data)
-	return b.MayContainInLine(data, b.lineByte(lineIndex))
-}
-func (b *BloomFilter) MayContainInLine(data, line []byte) bool {
-	if len(line) != lineBytes {
-		return false
-	}
-
-	_, hash := b.hash(data)
+	lineIndex, hash := b.hash(data)
 
 	for i := uint(0); i < b.k; i++ {
 		pos := position(hash, i)
-		byteIndex := pos / 8
-		bitIndex := pos % 8
+		globalBit := lineIndex*lineBits + uint64(pos)
 
-		if line[byteIndex]&(byte(1)<<bitIndex) == 0 {
+		word := globalBit / 32
+		bit := globalBit % 32
+
+		if b.bits[word]&(uint32(1)<<bit) == 0 {
 			return false
 		}
 	}
 
 	return true
+}
+func MayContainInLine(token []byte, k uint, line []byte) (bool, error) {
+	if len(line) != lineBytes {
+		return false, fmt.Errorf("invalid line length: got %d bytes, want %d", len(line), lineBytes)
+	}
+
+	hash := hashToken(token)
+
+	for i := uint(0); i < k; i++ {
+		pos := position(hash, i)
+		byteIndex := pos / 8
+		bitIndex := pos % 8
+
+		if line[byteIndex]&(byte(1)<<bitIndex) == 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 func (b *BloomFilter) lineByte(lineIndex uint64) []byte {
