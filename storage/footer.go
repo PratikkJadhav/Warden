@@ -43,7 +43,11 @@ func (f *footer) Encode() []byte {
 
 func DecodeFooter(buf []byte) (footer, error) {
 	if len(buf) != FooterSize {
-		return footer{}, fmt.Errorf("invalid footer entry size: got %d, want %d", len(buf), FooterSize)
+		return footer{}, fmt.Errorf(
+			"invalid footer size: got %d, want %d",
+			len(buf),
+			FooterSize,
+		)
 	}
 
 	var f footer
@@ -70,8 +74,5 @@ func DecodeFooter(buf []byte) (footer, error) {
 		return footer{}, fmt.Errorf("unsupported footer version: %d", f.Version)
 	}
 
-	return footer{}, fmt.Errorf(
-		"invalid footer size: got %d, want %d",
-		len(buf), FooterSize,
-	)
+	return f, nil
 }
