@@ -11,11 +11,11 @@ const BloomLineSize int64 = 64
 
 type store struct {
 	file          *os.File
+	path          string
 	currentfileID uint32
 	dir           string
-
-	filterBuf []byte
-	dataBuf   []byte
+	filterBuf     []byte
+	dataBuf       []byte
 }
 
 func newStore(dir string) (*store, error) {
@@ -39,6 +39,7 @@ func newStore(dir string) (*store, error) {
 		file:          file,
 		currentfileID: fileID,
 		dir:           dir,
+		path:          path,
 	}, nil
 }
 

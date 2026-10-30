@@ -61,13 +61,9 @@ func hashToken(data []byte) uint64 {
 }
 
 func (b *BloomFilter) hash(data []byte) (uint64, uint64) {
-	h := fnv.New64a()
-	h.Write(data)
-	hash := h.Sum64()
+	hash := hashToken(data)
 
-	hash = fmix64(hash)
-
-	noLines := len(b.bits) / 16
+	noLines := len(b.bits) / lineWords
 	bitline := hash % uint64(noLines)
 
 	return bitline, hash

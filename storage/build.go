@@ -2,7 +2,7 @@ package storage
 
 import (
 	"fmt"
-	"path/filepath"
+	"os"
 	"strings"
 
 	"github.com/PratikkJadhav/Warden/bloom"
@@ -19,6 +19,15 @@ func BuildSegment(dir string, lines []string, linesPerBlock int) (path string, e
 	if err != nil {
 		return "", err
 	}
+	completed := false
+
+	defer func() {
+		s.close()
+
+		if !completed {
+			os.Remove(s.path)
+		}
+	}()
 
 	// 2. Divide lines into blocks
 	var entries []DirectoryEntry
@@ -36,11 +45,6 @@ func BuildSegment(dir string, lines []string, linesPerBlock int) (path string, e
 			for _, token := range tokens {
 				distinctTokens[token] = struct{}{}
 			}
-		}
-
-		// Create Bloom filter
-		if len(distinctTokens) == 0 {
-			return "", fmt.Errorf("block starting at line %d contains no tokens", start)
 		}
 
 		filter := bloom.NewBloom(uint32(len(distinctTokens)), 0.0005)
@@ -82,7 +86,6 @@ func BuildSegment(dir string, lines []string, linesPerBlock int) (path string, e
 		return "", err
 	}
 
-	// 7. Return segment path
-	path = filepath.Join(dir, "seg-000001.dat")
-	return path, nil
+	completed = true
+	return s.path, nil
 }
