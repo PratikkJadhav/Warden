@@ -575,3 +575,54 @@ func TestReadDirectoryRejectsDataRangeBeyondDirectory(t *testing.T) {
 		t.Fatal("expected error for data range beyond directory")
 	}
 }
+
+func TestReadBlock(t *testing.T) {
+	dir := t.TempDir()
+
+	s, err := newStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filter := make([]byte, 64)
+	filterOffset, err := s.appendAlignedFilter(filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []byte("ERROR payment timeout req=abc123\nINFO request completed status=200\n")
+
+	dataOffset, err := s.append(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entry := DirectoryEntry{
+		FilterOffset: uint64(filterOffset),
+		FilterSize:   uint64(len(filter)),
+		K:            3,
+		DataOffset:   uint64(dataOffset),
+		DataSize:     uint64(len(want)),
+		RowCount:     2,
+	}
+
+	if err := s.Finalize([]DirectoryEntry{entry}); err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(dir, "seg-000001.dat")
+
+	entries, err := ReadDirectory(path)
+	if err != nil {
+		t.Fatalf("ReadDirectory failed: %v", err)
+	}
+
+	got, err := ReadBlock(path, entries[0])
+	if err != nil {
+		t.Fatalf("ReadBlock failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ReadBlock mismatch\nGot:  %q\nWant: %q", got, want)
+	}
+}

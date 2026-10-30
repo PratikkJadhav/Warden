@@ -120,3 +120,24 @@ func validateEntry(entry DirectoryEntry, directoryOffset uint64) error {
 
 	return nil
 }
+
+func ReadBlock(path string, entry DirectoryEntry) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	block := make([]byte, entry.DataSize)
+
+	n, err := file.ReadAt(block, int64(entry.DataOffset))
+	if err != nil {
+		return nil, err
+	}
+
+	if n != len(block) {
+		return nil, fmt.Errorf("incomplete block: read %d bytes, expected %d", n, len(block))
+	}
+
+	return block, nil
+}

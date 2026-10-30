@@ -60,3 +60,79 @@ func TestFalsePositiveRate(t *testing.T) {
 		})
 	}
 }
+
+func TestMayContainInLineMatchesMayContain(t *testing.T) {
+	filter := NewBloom(1000, 0.01)
+
+	tokens := [][]byte{
+		[]byte("payment"),
+		[]byte("timeout"),
+		[]byte("request"),
+		[]byte("status"),
+	}
+
+	for _, token := range tokens {
+		filter.Add(token)
+	}
+
+	for _, token := range tokens {
+		lineIndex, err := LineIndex(token, filter.NumLines())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		line := filter.lineByte(lineIndex)
+
+		got, err := MayContainInLine(token, filter.K(), line)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		want := filter.MayContain(token)
+		if got != want {
+			t.Errorf(
+				"token %q: MayContainInLine() = %v, MayContain() = %v",
+				token, got, want,
+			)
+		}
+
+		if !got {
+			t.Errorf("inserted token %q was reported absent", token)
+		}
+	}
+}
+
+func TestMayContainInLineMatchesMayContainForAbsentTokens(t *testing.T) {
+	filter := NewBloom(1000, 0.01)
+
+	filter.Add([]byte("payment"))
+	filter.Add([]byte("timeout"))
+
+	tokens := [][]byte{
+		[]byte("database"),
+		[]byte("authentication"),
+		[]byte("missing-request"),
+	}
+
+	for _, token := range tokens {
+		lineIndex, err := LineIndex(token, filter.NumLines())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		line := filter.lineByte(lineIndex)
+
+		got, err := MayContainInLine(token, filter.K(), line)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		want := filter.MayContain(token)
+		if got != want {
+			t.Errorf(
+				"token %q: standalone probe = %v, in-memory probe = %v",
+				token, got, want,
+			)
+		}
+	}
+}
